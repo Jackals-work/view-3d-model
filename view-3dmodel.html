@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>عارض 3D احترافي | متعدد المجسمات + HDRI + تأثيرات متقدمة</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Cairo', 'Tahoma', sans-serif;
+            overflow: hidden;
+            background: #0a0a2a;
+        }
+
+        /* منطقة السحب والإفلات */
+        #drop-zone {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(20px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            transition: all 0.3s ease;
+            pointer-events: none;
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        #drop-zone.active {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: all;
+        }
+
+        .drop-content {
+            text-align: center;
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            padding: 2.5rem 4rem;
+            border-radius: 50px;
+            border: 2px dashed #3b82f6;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.3);
+            color: white;
+            transform: scale(0.9);
+            transition: transform 0.3s;
+        }
+
+        #drop-zone.active .drop-content {
+            transform: scale(1);
+        }
+
+        .drop-content h2 {
+            margin: 15px 0 10px;
+            font-size: 28px;
+        }
+
+        .drop-content p {
+            opacity: 0.8;
+            margin: 5px 0;
+        }
+
+        .supported-formats {
+            color: #3b82f6;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        /* شريط المعلومات السفلي */
+        .info-bar {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(12px);
+            padding: 12px 24px;
+            border-radius: 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 15;
+            color: white;
+            font-size: 13px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .model-name {
+            background: rgba(59,130,246,0.3);
+            padding: 6px 16px;
+            border-radius: 40px;
+            font-size: 12px;
+            font-family: monospace;
+            direction: ltr;
+        }
+
+        .controls-hint {
+            display: flex;
+            gap: 12px;
+        }
+
+        .controls-hint span {
+            background: rgba(255,255,255,0.1);
+            padding: 4px 12px;
+            border-radius: 30px;
+            font-size: 11px;
+        }
+
+        /* مؤشر التحميل */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(10px);
+            z-index: 200;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            visibility: hidden;
+            opacity: 0;
+            transition: 0.2s;
+            flex-direction: column;
+            color: white;
+            pointer-events: none;
+        }
+
+        .loading-overlay.show {
+            visibility: visible;
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .spinner {
+            width: 55px;
+            height: 55px;
+            border: 4px solid #3b82f6;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* لوحة الإعدادات الرئيسية (قابلة للطي) */
+        .settings-container {
+            position: fixed;
+            bottom: 100px;
+            left: 20px;
+            z-index: 16;
+        }
+
+        .settings-toggle {
+            width: 55px;
+            height: 55px;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(59,130,246,0.4);
+            transition: all 0.2s;
+            border: 2px solid white;
+        }
+
+        .settings-toggle:hover {
+            transform: scale(1.05);
+        }
+
+        .settings-panel {
+            position: absolute;
+            bottom: 75px;
+            left: 0;
+            background: rgba(0, 0, 0, 0.92);
+            backdrop-filter: blur(16px);
+            border-radius: 24px;
+            padding: 18px;
+            width: 300px;
+            transition: all 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(20px);
+            border: 1px solid rgba(255,255,255,0.12);
+            color: white;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .settings-panel.open {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .panel-section {
+            border-top: 1px solid rgba(255,255,255,0.1);
+            padding-top: 14px;
+            margin-top: 14px;
+        }
+
+        .panel-section:first-child {
+            border-top: none;
+            padding-top: 0;
+            margin-top: 0;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #3b82f6;
+        }
+
+        .light-buttons, .hdri-buttons, .bg-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
+        .ctrl-btn {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: white;
+        }
+
+        .ctrl-btn:hover {
+            background: #3b82f6;
+            transform: scale(0.96);
+        }
+
+        .ctrl-btn.active {
+            background: #3b82f6;
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .slider-container label {
+            font-size: 11px;
+            font-weight: 500;
+            color: #cbd5e1;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            background: rgba(255,255,255,0.2);
+            height: 4px;
+            border-radius: 5px;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]:focus {
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+        }
+
+        .color-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        #bg-color-picker {
+            width: 45px;
+            height: 35px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            cursor: pointer;
+            background: white;
+        }
+
+        .toggle-switch {
+            width: 48px;
+            height: 24px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 30px;
+            position: relative;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .toggle-switch.active {
+            background: #3b82f6;
+        }
+
+        .toggle-switch::after {
+            content: "";
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            left: 3px;
+            transition: 0.2s;
+        }
+
+        .toggle-switch.active::after {
+            left: 25px;
+        }
+
+        .smooth-toggle, .hdri-toggle {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255,255,255,0.05);
+            padding: 8px 12px;
+            border-radius: 40px;
+            margin-top: 8px;
+        }
+
+        /* لوحة المجسمات (الجهة اليمنى) */
+        .models-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(16px);
+            border-radius: 24px;
+            padding: 16px;
+            z-index: 16;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.3s;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .models-panel.collapsed {
+            transform: translateX(350px);
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .models-panel h3 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .clear-all-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+
+        .clear-all-btn:hover {
+            background: #dc2626;
+            transform: scale(0.95);
+        }
+
+        .models-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .model-item {
+            background: rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 10px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .model-item:hover {
+            background: rgba(255,255,255,0.12);
+            transform: translateX(-5px);
+        }
+
+        .model-info {
+            flex: 1;
+        }
+
+        .model-name-small {
+            font-size: 12px;
+            font-weight: 500;
+            color: white;
+            direction: ltr;
+        }
+
+        .model-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .model-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .model-btn.visibility {
+            background: rgba(34,197,94,0.2);
+            color: #22c55e;
+        }
+
+        .model-btn.visibility.active {
+            background: #22c55e;
+            color: white;
+        }
+
+        .model-btn.delete {
+            background: rgba(239,68,68,0.2);
+            color: #ef4444;
+        }
+
+        .model-btn.delete:hover {
+            background: #ef4444;
+            color: white;
+        }
+
+        .model-btn.select {
+            background: rgba(59,130,246,0.2);
+            color: #3b82f6;
+        }
+
+        .model-btn.select:hover {
+            background: #3b82f6;
+            color: white;
+        }
+
+        /* زر تبديل لوحة المجسمات */
+        .toggle-models-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 17;
+            border: 2px solid white;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            transition: all 0.2s;
+            font-size: 24px;
+        }
+
+        .toggle-models-panel:hover {
+            transform: scale(1.05);
+        }
+
+        /* زر إعادة تعيين الكاميرا */
+        .reset-cam-btn {
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 15;
+            font-size: 24px;
+            transition: all 0.2s;
+        }
+
+        .reset-cam-btn:hover {
+            background: #3b82f6;
+            transform: scale(1.05);
+        }
+
+        /* تنسيق الشريط الجانبي */
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #3b82f6;
+            border-radius: 10px;
+        }
+
+        @media (max-width: 700px) {
+            .models-panel { width: 280px; }
+            .settings-panel { width: 270px; }
+            .controls-hint span:last-child { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- منطقة السحب والإفلات -->
+    <div id="drop-zone">
+        <div class="drop-content">
+            <div style="font-size: 70px;">📦✨</div>
+            <h2>اسحب ملف ثلاثي الأبعاد وأفلته</h2>
+            <p>الصيغ المدعومة: <strong>GLB, FBX, OBJ, STL</strong></p>
+            <div class="supported-formats">🎨 إضاءة HDRI احترافية | تأثيرات Bloom | إضافة تراكمية للمجسمات</div>
+            <p style="font-size:13px; margin-top:15px;">📌 يمكنك سحب عدة ملفات دفعة واحدة</p>
+        </div>
+    </div>
+
+    <!-- مؤشر التحميل -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <div>جاري تحميل المجسم ثلاثي الأبعاد ...</div>
+    </div>
+
+    <!-- شريط المعلومات السفلي -->
+    <div class="info-bar">
+        <div class="model-name" id="model-name-display">✨ اسحب ملفات ثلاثية الأبعاد</div>
+        <div class="controls-hint">
+            <span>🖱️ زر أيسر: تدوير</span>
+            <span>🖱️ زر أيمن: سحب</span>
+            <span>🔍 تمرير: تقريب/تبعيد</span>
+        </div>
+    </div>
+
+    <!-- زر تبديل لوحة المجسمات -->
+    <div id="toggleModelsPanel" class="toggle-models-panel">
+        📋
+    </div>
+
+    <!-- لوحة المجسمات (الجهة اليمنى) -->
+    <div id="modelsPanel" class="models-panel">
+        <h3>
+            📦 المجسمات المحملة (<span id="modelsCount">0</span>)
+            <button id="clearAllModels" class="clear-all-btn">🗑️ مسح الكل</button>
+        </h3>
+        <div id="modelsList" class="models-list">
+            <div style="text-align: center; color: #94a3b8; padding: 30px;">
+                ✨ اسحب ملفات ثلاثية الأبعاد<br>ستظهر هنا
+            </div>
+        </div>
+    </div>
+
+    <!-- حاوية الإعدادات القابلة للطي -->
+    <div class="settings-container">
+        <div id="settingsPanel" class="settings-panel">
+            <!-- إضاءة HDRI -->
+            <div class="panel-section">
+                <div class="section-title">🌞 إضاءة HDRI</div>
+                <div class="hdri-buttons">
+                    <button class="ctrl-btn" data-hdri="studio">استوديو</button>
+                    <button class="ctrl-btn" data-hdri="sunset">غروب</button>
+                    <button class="ctrl-btn" data-hdri="forest">غابة</button>
+                    <button class="ctrl-btn" data-hdri="warehouse">مستودع</button>
+                </div>
+                <div class="slider-container">
+                    <label>💡 شدة إضاءة HDRI</label>
+                    <input type="range" id="hdriIntensity" min="0.2" max="2.5" step="0.01" value="1.0">
+                </div>
+                <div class="hdri-toggle">
+                    <span>🎨 إخفاء خلفية HDRI (يبقى تأثير الإضاءة)</span>
+                    <div id="hdriVisibilityToggle" class="toggle-switch active"></div>
+                </div>
+            </div>
+
+            <!-- الإضاءة الديناميكية -->
+            <div class="panel-section">
+                <div class="section-title">💡 الإضاءة الديناميكية</div>
+                <div class="light-buttons">
+                    <button class="ctrl-btn" data-preset="front">أمامي</button>
+                    <button class="ctrl-btn" data-preset="top">علوي</button>
+                    <button class="ctrl-btn" data-preset="side">جانبي</button>
+                    <button class="ctrl-btn" id="followCamBtn">🎥 تتبع الكاميرا</button>
+                </div>
+                <div class="slider-container">
+                    <label>🔆 شدة الضوء الرئيسي</label>
+                    <input type="range" id="intensitySlider" min="0.2" max="2.2" step="0.01" value="1.0">
+                </div>
+                <div class="slider-container">
+                    <label>💡 إضاءة محيطة</label>
+                    <input type="range" id="ambientSlider" min="0.1" max="1.3" step="0.01" value="0.5">
+                </div>
+            </div>
+
+            <!-- لون الخلفية -->
+            <div class="panel-section">
+                <div class="section-title">🎨 لون الخلفية</div>
+                <div class="bg-buttons">
+                    <button class="ctrl-btn bg-preset" data-bg="#0a0a2a">داكن</button>
+                    <button class="ctrl-btn bg-preset" data-bg="#ffffff">أبيض</button>
+                    <button class="ctrl-btn bg-preset" data-bg="#1a1a2e">أزرق داكن</button>
+                    <button class="ctrl-btn bg-preset" data-bg="#e0f2fe">أزرق فاتح</button>
+                </div>
+                <div class="color-row">
+                    <span style="font-size:12px;">لون مخصص:</span>
+                    <input type="color" id="bg-color-picker" value="#0a0a2a">
+                </div>
+            </div>
+
+            <!-- تأثيرات متقدمة -->
+            <div class="panel-section">
+                <div class="section-title">✨ تأثيرات متقدمة</div>
+                <div class="smooth-toggle">
+                    <span>🌟 تأثير Bloom (توهج)</span>
+                    <div id="bloomToggle" class="toggle-switch active"></div>
+                </div>
+                <div class="smooth-toggle" style="margin-top: 8px;">
+                    <span>🔄 دوران تلقائي للكاميرا</span>
+                    <div id="autoRotateToggle" class="toggle-switch"></div>
+                </div>
+                <div class="smooth-toggle" style="margin-top: 8px;">
+                    <span>✨ تنعيم الحواف (Anti-aliasing)</span>
+                    <div id="smoothToggle" class="toggle-switch active"></div>
+                </div>
+            </div>
+        </div>
+        <div id="settingsToggle" class="settings-toggle">
+            ⚙️
+        </div>
+    </div>
+
+    <!-- زر إعادة تعيين الكاميرا -->
+    <div id="reset-camera" class="reset-cam-btn">⟳</div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+
+  <script type="module">
+    // ================================================================
+    // IMPORT LIBRARIES - استيراد المكتبات اللازمة
+    // ================================================================
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+    import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+    import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+    import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    // ================================================================
+    // SECTION 1: INITIALIZATION - تهيئة المشهد والكاميرا والرندرر
+    // ================================================================
+    
+    // إنشاء المشهد (Scene) - المسرح الذي ستُعرض فيه جميع المجسمات
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a2a);      // لون الخلفية أزرق داكن
+    scene.fog = new THREE.FogExp2(0x0a0a2a, 0.008);    // تأثير الضباب لإعطاء عمق
+    
+    // إنشاء الكاميرا (Camera) - منظور المشاهدة
+    // المعاملات: مجال الرؤية (45°)، نسبة العرض للارتفاع، أقرب مستوى رؤية، أبعد مستوى رؤية
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(8, 5, 12);  // تحديد موقع الكاميرا: يمين، أعلى، أمام
+    
+    // إنشاء الرندرر (Renderer) - المسؤول عن رسم المشهد على الشاشة
+    const renderer = new THREE.WebGLRenderer({ 
+        antialias: true,                    // تفعيل تنعيم الحواف
+        alpha: false,                       // خلفية غير شفافة
+        powerPreference: "high-performance" // استخدام الأداء العالي
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);                    // ضبط الحجم لملء الشاشة
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));              // ضبط كثافة البكسل
+    renderer.shadowMap.enabled = true;                                         // تفعيل الظلال
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;                          // ظلال ناعمة
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;                        // تحسين الألوان
+    renderer.toneMappingExposure = 1.3;                                        // مستوى التعريض
+    document.body.appendChild(renderer.domElement);                            // إضافة الرندرر إلى الصفحة
+
+    // ================================================================
+    // SECTION 2: POST PROCESSING - تأثيرات ما بعد المعالجة (Bloom)
+    // ================================================================
+    
+    // RenderPass: المسؤول عن تمرير المشهد الأساسي
+    const renderScene = new RenderPass(scene, camera);
+    
+    // UnrealBloomPass: تأثير التوهج (Bloom) لجعل الأجزاء الساطعة تتوهج
+    const bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight), 
+        0.7,   // القوة
+        0.3,   // نصف القطر
+        0.2    // العتبة
+    );
+    bloomPass.threshold = 0.15;   // الحد الأدنى للسطوع الذي يبدأ عنده التوهج
+    bloomPass.strength = 0.55;    // شدة التوهج
+    bloomPass.radius = 0.5;       // نصف قطر التوهج
+    
+    // EffectComposer: مدير التأثيرات - يطبق التأثيرات على المشهد
+    const effectComposer = new EffectComposer(renderer);
+    effectComposer.addPass(renderScene);   // إضافة المشهد الأساسي
+    effectComposer.addPass(bloomPass);     // إضافة تأثير التوهج
+
+    // ================================================================
+    // SECTION 3: ORBIT CONTROLS - التحكم في الكاميرا (سحب، تدوير، تكبير)
+    // ================================================================
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;          // تفعيل القصور الذاتي للحركة
+    controls.dampingFactor = 0.07;          // معامل القصور الذاتي
+    controls.rotateSpeed = 1.5;             // سرعة التدوير
+    controls.zoomSpeed = 1.2;               // سرعة التكبير
+    controls.panSpeed = 0.8;                // سرعة التحريك الجانبي
+    controls.enableZoom = true;              // السماح بالتكبير
+    controls.enablePan = true;               // السماح بالتحريك
+    controls.target.set(0, 0.5, 0);          // نقطة التركيز الافتراضية
+
+    // ================================================================
+    // SECTION 4: LIGHTING SYSTEM - نظام الإضاءة المتقدم
+    // ================================================================
+    
+    // إضاءة محيطة (Ambient Light) - تضيء جميع الاتجاهات بشكل متساوٍ
+    const ambientLight = new THREE.AmbientLight(0x404060, 0.45);
+    scene.add(ambientLight);
+    
+    // إضاءة نصف كروية (Hemisphere Light) - لون من الأعلى وآخر من الأسفل
+    const hemiLight = new THREE.HemisphereLight(0x8b9dc3, 0x3d5a80, 0.4);
+    scene.add(hemiLight);
+    
+    // الإضاءة الرئيسية (Directional Light) - تشبه ضوء الشمس
+    const mainLight = new THREE.DirectionalLight(0xfff5e6, 1.0);
+    mainLight.position.set(5, 8, 6);
+    mainLight.castShadow = true;                     // إلقاء الظلال
+    mainLight.receiveShadow = true;                  // استقبال الظلال
+    mainLight.shadow.mapSize.width = 2048;           // دقة خريطة الظل
+    mainLight.shadow.mapSize.height = 2048;
+    mainLight.shadow.camera.near = 0.5;
+    mainLight.shadow.camera.far = 20;
+    mainLight.shadow.camera.left = -6;
+    mainLight.shadow.camera.right = 6;
+    mainLight.shadow.camera.top = 6;
+    mainLight.shadow.camera.bottom = -6;
+    scene.add(mainLight);
+    
+    // إضاءة تعبئة (Fill Light) - تملأ المناطق المظلمة
+    const fillLight = new THREE.PointLight(0x6688aa, 0.4);
+    fillLight.position.set(3, 2, 4);
+    scene.add(fillLight);
+    
+    // إضاءة حافة (Rim Light) - تبرز حواف المجسمات
+    const rimLight = new THREE.PointLight(0xffaa66, 0.45);
+    rimLight.position.set(-3, 2.5, -4);
+    scene.add(rimLight);
+    
+    // إضاءة متحركة (Bounce Light) - تضيء من الأسفل بتأثير نابض
+    const bounceLight = new THREE.PointLight(0x88aacc, 0.25);
+    bounceLight.position.set(0, -1, 0);
+    scene.add(bounceLight);
+    
+    // شبكة أرضية (Grid Helper) - للمساعدة في تحديد الموقع والاتجاه
+    const gridHelper = new THREE.GridHelper(18, 30, 0x4a6fa5, 0x2c3e66);
+    gridHelper.position.y = -0.8;
+    gridHelper.material.transparent = true;
+    gridHelper.material.opacity = 0.3;
+    scene.add(gridHelper);
+    
+    // سطح لاستقبال الظلال (Shadow Receiver Ground)
+    const groundPlane = new THREE.Mesh(
+        new THREE.PlaneGeometry(16, 16),
+        new THREE.ShadowMaterial({ opacity: 0.4, color: 0x000000, transparent: true, side: THREE.DoubleSide })
+    );
+    groundPlane.rotation.x = -Math.PI / 2;
+    groundPlane.position.y = -0.75;
+    groundPlane.receiveShadow = true;
+    scene.add(groundPlane);
+
+    // ================================================================
+    // SECTION 5: HDRI LOADING - تحميل خلفيات عالية الدقة (HDR)
+    // ================================================================
+    const rgbeLoader = new RGBELoader();
+    let currentHDRI = null;      // تخزين الـ HDR الحالي
+    let hdriVisible = true;      // حالة ظهور الـ HDR
+    let hdriIntensity = 1.0;     // شدة الإضاءة من الـ HDR
+    
+    // قائمة روابط خلفيات HDR متاحة (من Poly Haven)
+    const hdriMap = {
+        studio: 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_03_1k.hdr',
+        sunset: 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/sunset_01_1k.hdr',
+        forest: 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/forest_slope_01_1k.hdr',
+        warehouse: 'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/warehouse_01_1k.hdr'
+    };
+    
+    // دالة تحميل HDRI حسب النوع المحدد
+    function loadHDRI(type) {
+        showLoading(true);                       // إظهار شاشة التحميل
+        const url = hdriMap[type];
+        if (!url) return;
+        
+        rgbeLoader.load(url, (texture) => {
+            texture.mapping = THREE.EquirectangularMapping;  // تعيين الإسقاط الكروي
+            currentHDRI = texture;
+            updateHDRI();                                    // تحديث المشهد بالـ HDR الجديد
+            showLoading(false);
+        }, undefined, (err) => {
+            console.warn('فشل تحميل HDRI:', err);
+            showLoading(false);
+        });
+    }
+    
+    // تحديث إعدادات الـ HDR في المشهد
+    function updateHDRI() {
+        if (currentHDRI) {
+            currentHDRI.intensity = hdriIntensity;
+            scene.environment = currentHDRI;     // تعيين الـ HDR كبيئة محيطة
+            
+            if (hdriVisible) {
+                scene.background = currentHDRI;  // تعيين الـ HDR كخلفية
+                scene.fog = null;                // إزالة الضباب لظهور الخلفية بشكل كامل
+            } else {
+                scene.background = new THREE.Color(bgColorPicker.value);
+                scene.fog = new THREE.FogExp2(bgColorPicker.value, 0.008);
+            }
+        }
+    }
+    
+    // التحكم في إظهار/إخفاء الـ HDR
+    function setHDRIVisibility(visible) {
+        hdriVisible = visible;
+        updateHDRI();
+    }
+    
+    // التحكم في شدة إضاءة الـ HDR
+    function setHDRIIntensity(value) {
+        hdriIntensity = value;
+        if (currentHDRI) {
+            currentHDRI.intensity = value;
+            scene.environment = currentHDRI;
+        }
+    }
+
+    // ================================================================
+    // SECTION 6: MODELS MANAGEMENT - إدارة المجسمات المحملة
+    // ================================================================
+    let modelsList = [];           // قائمة المجسمات المحملة
+    let nextModelId = 1;           // معرف المجسم التالي
+    let selectedModelId = null;    // المجسم المحدد حالياً
+    let autoRotate = false;        // حالة الدوران التلقائي
+    let bloomEnabled = true;       // حالة تأثير التوهج
+    let followCameraLight = false; // حالة إضاءة تتبع الكاميرا
+    
+    // تعريف لوادر تحميل الملفات (كل صيغة لها لودر خاص)
+    const gltfLoader = new GLTFLoader();   // لصيغة GLTF/GLB
+    const fbxLoader = new FBXLoader();     // لصيغة FBX
+    const objLoader = new OBJLoader();     // لصيغة OBJ
+    const stlLoader = new STLLoader();     // لصيغة STL
+    
+    // مراجع لعناصر DOM في الصفحة
+    const dropZone = document.getElementById('drop-zone');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const modelNameDisplay = document.getElementById('model-name-display');
+    const resetBtn = document.getElementById('reset-camera');
+    const modelsPanel = document.getElementById('modelsPanel');
+    const toggleModelsBtn = document.getElementById('toggleModelsPanel');
+    const modelsListContainer = document.getElementById('modelsList');
+    const clearAllBtn = document.getElementById('clearAllModels');
+    const modelsCountSpan = document.getElementById('modelsCount');
+    
+    // مراجع لعناصر الإعدادات
+    const settingsPanel = document.getElementById('settingsPanel');
+    const settingsToggle = document.getElementById('settingsToggle');
+    const intensitySlider = document.getElementById('intensitySlider');
+    const ambientSlider = document.getElementById('ambientSlider');
+    const followCamBtn = document.getElementById('followCamBtn');
+    const bgColorPicker = document.getElementById('bg-color-picker');
+    const bgPresetBtns = document.querySelectorAll('.bg-preset');
+    const smoothToggle = document.getElementById('smoothToggle');
+    const hdriIntensitySlider = document.getElementById('hdriIntensity');
+    const hdriVisibilityToggle = document.getElementById('hdriVisibilityToggle');
+    const bloomToggle = document.getElementById('bloomToggle');
+    const autoRotateToggle = document.getElementById('autoRotateToggle');
+    
+    let panelVisible = true;  // حالة ظهور لوحة المجسمات
+
+    // ================================================================
+    // SECTION 7: LIGHTING CONTROL FUNCTIONS - دوال التحكم بالإضاءة
+    // ================================================================
+    
+    // تغيير لون الخلفية
+    function setBackgroundColor(hexColor) {
+        if (!hdriVisible || !currentHDRI) {
+            scene.background = new THREE.Color(hexColor);
+            if (!hdriVisible) {
+                scene.fog = new THREE.FogExp2(hexColor, 0.008);
+            }
+        }
+        bgColorPicker.value = hexColor;
+    }
+    
+    // تحديد موقع الإضاءة الرئيسية
+    function setMainLightPosition(x, y, z) {
+        mainLight.position.set(x, y, z);
+        followCameraLight = false;   // إلغاء وضع تتبع الكاميرا عند التحديد اليدوي
+        followCamBtn.classList.remove('active');
+        followCamBtn.textContent = '🎥 تتبع الكاميرا';
+    }
+    
+    // تحديث شدة الإضاءة الرئيسية من شريط التحكم
+    function updateLightIntensity() { 
+        mainLight.intensity = parseFloat(intensitySlider.value); 
+    }
+    
+    // تحديث شدة الإضاءة المحيطة
+    function updateAmbientIntensity() { 
+        ambientLight.intensity = parseFloat(ambientSlider.value); 
+    }
+    
+    // تفعيل/إلغاء إضاءة تتبع الكاميرا
+    function enableFollowCameraLight(enable) {
+        followCameraLight = enable;
+        if (enable) {
+            followCamBtn.classList.add('active');
+            followCamBtn.textContent = '🎥 تتبع مفعل';
+        } else {
+            followCamBtn.classList.remove('active');
+            followCamBtn.textContent = '🎥 تتبع الكاميرا';
+        }
+    }
+    
+    // تحديث موقع الإضاءة ليتجه مع اتجاه الكاميرا
+    function updateLightFromCamera() {
+        if (!followCameraLight) return;
+        const camDir = camera.getWorldDirection(new THREE.Vector3());
+        const lightDir = camDir.clone().negate().normalize();  // اتجاه معاكس لاتجاه الكاميرا
+        mainLight.position.set(lightDir.x * 5, lightDir.y * 3 + 2, lightDir.z * 5);
+    }
+    
+    // تطبيق إعداد إضاءة مسبق (أمامي، علوي، جانبي)
+    function applyPreset(preset) {
+        if (preset === 'front') setMainLightPosition(0, 2.5, 7);
+        else if (preset === 'top') setMainLightPosition(0, 9, 1);
+        else if (preset === 'side') setMainLightPosition(6, 3.5, 2);
+    }
+
+    // ================================================================
+    // SECTION 8: MODEL HELPER FUNCTIONS - دوال مساعدة لإدارة المجسمات
+    // ================================================================
+    
+    // توسيط المجسم وتعديل حجمه ليتناسب مع المشهد
+    function centerAndScaleModel(model, fileName) {
+        // حساب الصندوق المحيط (Bounding Box) للمجسم
+        const box = new THREE.Box3().setFromObject(model);
+        const center = box.getCenter(new THREE.Vector3());
+        const minY = box.min.y;
+        const offsetY = -minY + 0.1;   // رفع المجسم ليقف على الأرض
+        
+        model.position.y = offsetY;
+        
+        // حساب الحجم الأقصى وتعديل القياس
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        let scale = 1;
+        if (maxDim > 2.5) scale = 2.2 / maxDim;      // تصغير إذا كان كبيراً
+        else if (maxDim < 0.5) scale = 1.2 / maxDim; // تكبير إذا كان صغيراً
+        if (scale !== 1) model.scale.set(scale, scale, scale);
+        
+        // تحسين المواد (خامات المجسم) للحصول على مظهر أفضل
+        model.traverse(node => {
+            if (node.isMesh) {
+                node.castShadow = true;      // إلقاء ظلال
+                node.receiveShadow = true;   // استقبال ظلال
+                if (node.material) {
+                    const mats = Array.isArray(node.material) ? node.material : [node.material];
+                    mats.forEach(mat => {
+                        mat.roughness = Math.max(0.3, mat.roughness || 0.4);    // خشونة السطح
+                        mat.metalness = Math.min(0.7, mat.metalness || 0.5);    // معدنية السطح
+                        mat.envMapIntensity = 0.8;                               // تأثير البيئة المحيطة
+                        if (currentHDRI) {
+                            mat.envMap = currentHDRI;                            // تطبيق خريطة البيئة
+                        }
+                    });
+                }
+            }
+        });
+    }
+    
+    // إعادة ترتيب المجسمات بشكل دائري حول المركز
+    function rearrangeModelsInCircle() {
+        const radius = 3.5;   // نصف قطر الدائرة
+        modelsList.forEach((model, index) => {
+            const angle = index * (Math.PI * 2 / Math.max(modelsList.length, 1));
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            model.object.position.set(x, model.object.position.y, z);
+        });
+    }
+    
+    // ضبط الكاميرا لرؤية جميع المجسمات في المشهد
+    function fitCameraToAllModels() {
+        if (modelsList.length === 0) {
+            // إذا لم يوجد مجسمات، ارجع إلى الإعدادات الافتراضية
+            camera.position.set(8, 5, 12);
+            controls.target.set(0, 0.5, 0);
+            controls.update();
+            return;
+        }
+        
+        // حساب الصندوق المحيط لجميع المجسمات
+        const boundingBox = new THREE.Box3();
+        modelsList.forEach(model => {
+            boundingBox.expandByObject(model.object);
+        });
+        
+        const center = boundingBox.getCenter(new THREE.Vector3());
+        const size = boundingBox.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const distance = Math.max(5, maxDim * 1.8);  // مسافة الكاميرا تتناسب مع حجم المجسمات
+        
+        controls.target.copy(center);
+        camera.position.set(center.x + distance * 0.7, center.y + distance * 0.5, center.z + distance);
+        controls.update();
+    }
+    
+    // تحديث واجهة المستخدم لقائمة المجسمات
+    function updateModelsListUI() {
+        if (!modelsListContainer) return;
+        
+        if (modelsList.length === 0) {
+            modelsListContainer.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 30px;">✨ اسحب ملفات ثلاثية الأبعاد<br>ستظهر هنا</div>';
+            modelsCountSpan.textContent = '0';
+            return;
+        }
+        
+        modelsCountSpan.textContent = modelsList.length;
+        
+        // إنشاء عناصر HTML لكل مجسم مع أزرار التحكم
+        modelsListContainer.innerHTML = modelsList.map(model => `
+            <div class="model-item" data-model-id="${model.id}">
+                <div class="model-info">
+                    <div class="model-name-small">${model.name.length > 25 ? model.name.substring(0, 22) + '...' : model.name}</div>
+                </div>
+                <div class="model-controls">
+                    <button class="model-btn visibility ${model.visible ? 'active' : ''}" onclick="window.toggleVisibility(${model.id})" title="${model.visible ? 'إخفاء' : 'إظهار'}">
+                        ${model.visible ? '👁️' : '👁️‍🗨️'}
+                    </button>
+                    <button class="model-btn select" onclick="window.selectModel(${model.id})" title="تحديد">
+                        🎯
+                    </button>
+                    <button class="model-btn delete" onclick="window.deleteModel(${model.id})" title="حذف">
+                        🗑️
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    // إضافة مجسم جديد إلى المشهد
+    function addModel(modelObject, fileName) {
+        const modelId = nextModelId++;
+        
+        // حساب موقع دائري للمجسم الجديد
+        const angle = modelsList.length * (Math.PI * 2 / 8);
+        const radius = 3.5;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        
+        modelObject.position.set(x, 0, z);
+        centerAndScaleModel(modelObject, fileName);
+        scene.add(modelObject);
+        
+        // إضافة المجسم إلى القائمة
+        modelsList.push({
+            id: modelId,
+            object: modelObject,
+            name: fileName,
+            visible: true
+        });
+        
+        updateModelsListUI();
+        rearrangeModelsInCircle();
+        fitCameraToAllModels();
+        
+        // عرض رسالة تأكيد
+        modelNameDisplay.innerHTML = `✅ تمت إضافة: ${fileName} (${modelsList.length} مجسم)`;
+        setTimeout(() => {
+            modelNameDisplay.innerHTML = `📦 ${modelsList.length} مجسمات محملة`;
+        }, 2000);
+    }
+    
+    // إظهار/إخفاء مجسم (دالة عامة يمكن استدعاؤها من HTML)
+    window.toggleVisibility = function(id) {
+        const model = modelsList.find(m => m.id === id);
+        if (model) {
+            model.visible = !model.visible;
+            model.object.visible = model.visible;
+            updateModelsListUI();
+        }
+    }
+    
+    // تحديد مجسم (توجيه الكاميرا نحوه)
+    window.selectModel = function(id) {
+        selectedModelId = id;
+        const model = modelsList.find(m => m.id === id);
+        if (model) {
+            const center = new THREE.Box3().setFromObject(model.object).getCenter(new THREE.Vector3());
+            controls.target.copy(center);
+            controls.update();
+            
+            modelNameDisplay.innerHTML = `🎯 تم تحديد: ${model.name}`;
+            setTimeout(() => {
+                if (selectedModelId === id) {
+                    modelNameDisplay.innerHTML = `📦 ${modelsList.length} مجسمات محملة`;
+                }
+            }, 2000);
+        }
+    }
+    
+    // حذف مجسم من المشهد
+    window.deleteModel = function(id) {
+        const modelIndex = modelsList.findIndex(m => m.id === id);
+        if (modelIndex !== -1) {
+            const model = modelsList[modelIndex];
+            scene.remove(model.object);
+            
+            // تنظيف الموارد (ذاكرة الجرافيكس) لتجنب التسريب
+            model.object.traverse(child => {
+                if (child.isMesh) {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                        else child.material.dispose();
+                    }
+                }
+            });
+            
+            modelsList.splice(modelIndex, 1);
+            updateModelsListUI();
+            rearrangeModelsInCircle();
+            fitCameraToAllModels();
+            
+            modelNameDisplay.innerHTML = `🗑️ تم حذف مجسم (${modelsList.length} متبقي)`;
+            if (selectedModelId === id) selectedModelId = null;
+        }
+    }
+    
+    // حذف جميع المجسمات
+    function clearAllModels() {
+        modelsList.forEach(model => {
+            scene.remove(model.object);
+            model.object.traverse(child => {
+                if (child.isMesh) {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                        else child.material.dispose();
+                    }
+                }
+            });
+        });
+        modelsList = [];
+        nextModelId = 1;
+        selectedModelId = null;
+        updateModelsListUI();
+        modelNameDisplay.innerHTML = '🗑️ تم مسح جميع المجسمات';
+        setTimeout(() => {
+            modelNameDisplay.innerHTML = '✨ اسحب ملفات ثلاثية الأبعاد';
+        }, 2000);
+    }
+    
+    // إظهار/إخفاء شاشة التحميل
+    function showLoading(show) {
+        if (show) loadingOverlay.classList.add('show');
+        else loadingOverlay.classList.remove('show');
+    }
+
+    // ================================================================
+    // SECTION 9: FILE LOADING - تحميل الملفات بأنواعها المختلفة
+    // ================================================================
+    
+    function loadModelFromFile(file) {
+        const fileName = file.name;
+        const ext = fileName.split('.').pop().toLowerCase();
+        
+        // التحقق من صحة الصيغة
+        if (!['glb', 'fbx', 'obj', 'stl'].includes(ext)) {
+            alert(`صيغة غير مدعومة: ${ext}\nالرجاء استخدام GLB, FBX, OBJ, STL`);
+            return;
+        }
+        
+        showLoading(true);
+        const url = URL.createObjectURL(file);  // إنشاء رابط مؤقت للملف
+        
+        const onSuccess = (model) => {
+            addModel(model, fileName);
+            showLoading(false);
+            URL.revokeObjectURL(url);  // تحرير الرابط المؤقت
+            dropZone.classList.remove('active');
+        };
+        
+        const onError = (err) => {
+            console.error(err);
+            showLoading(false);
+            modelNameDisplay.innerHTML = `❌ فشل تحميل ${fileName}`;
+            URL.revokeObjectURL(url);
+        };
+        
+        // اختيار اللودر المناسب حسب امتداد الملف
+        if (ext === 'glb') gltfLoader.load(url, (gltf) => onSuccess(gltf.scene), undefined, onError);
+        else if (ext === 'fbx') fbxLoader.load(url, onSuccess, undefined, onError);
+        else if (ext === 'obj') objLoader.load(url, onSuccess, undefined, onError);
+        else if (ext === 'stl') stlLoader.load(url, (geom) => {
+            const mat = new THREE.MeshStandardMaterial({ color: 0x8899bb, roughness: 0.4, metalness: 0.6 });
+            const mesh = new THREE.Mesh(geom, mat);
+            onSuccess(mesh);
+        }, undefined, onError);
+    }
+    
+    // تحميل نموذج افتراضي من رابط URL (إن وُجد)
+    function loadDefaultModel() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const idname = urlParams.get('idname');
+        const file = urlParams.get('file');
+        
+        if (idname && file) {
+            const modelUrl = `/get_model.php?idname=${encodeURIComponent(idname)}&file=${encodeURIComponent(file)}`;
+            gltfLoader.load(modelUrl, (gltf) => {
+                addModel(gltf.scene, file);
+            }, undefined, (err) => {
+                console.warn('النموذج الافتراضي غير موجود:', err);
+            });
+        }
+    }
+
+    // ================================================================
+    // SECTION 10: BLOOM & AUTO-ROTATE - تأثيرات التوهج والدوران التلقائي
+    // ================================================================
+    
+    function toggleBloom(enable) {
+        bloomEnabled = enable;
+        if (enable) {
+            // إضافة تأثير التوهج إن لم يكن موجوداً
+            if (!effectComposer.passes.includes(bloomPass)) {
+                effectComposer.insertPass(bloomPass, 1);
+            }
+        } else {
+            // إزالة تأثير التوهج
+            const index = effectComposer.passes.indexOf(bloomPass);
+            if (index !== -1) {
+                effectComposer.passes.splice(index, 1);
+            }
+        }
+    }
+    
+    function toggleAutoRotate(enable) {
+        autoRotate = enable;
+        controls.autoRotate = enable;
+        controls.autoRotateSpeed = 1.2;
+    }
+
+    // ================================================================
+    // SECTION 11: DRAG & DROP - أحداث السحب والإفلات لتحميل الملفات
+    // ================================================================
+    
+    function preventDefaults(e) { 
+        e.preventDefault(); 
+        e.stopPropagation(); 
+    }
+    
+    // منع السلوك الافتراضي للسحب والإفلات
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => 
+        document.body.addEventListener(ev, preventDefaults)
+    );
+    
+    // إظهار منطقة الإفلات عند سحب ملف
+    ['dragenter', 'dragover'].forEach(ev => 
+        document.body.addEventListener(ev, () => dropZone.classList.add('active'))
+    );
+    
+    // إخفاء منطقة الإفلات عند مغادرة الملف أو إنهاء الإفلات
+    ['dragleave', 'drop'].forEach(ev => 
+        document.body.addEventListener(ev, () => dropZone.classList.remove('active'))
+    );
+    
+    // معالجة إسقاط الملفات
+    document.body.addEventListener('drop', (e) => {
+        const files = e.dataTransfer.files;
+        if (files.length) {
+            for (let file of files) {
+                loadModelFromFile(file);
+            }
+        }
+        dropZone.classList.remove('active');
+    });
+    
+    // النقر على منطقة الإفلات لفتح مستعرض الملفات
+    const dropDiv = document.querySelector('#drop-zone .drop-content');
+    if (dropDiv) {
+        dropDiv.style.cursor = 'pointer';
+        dropDiv.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.glb,.fbx,.obj,.stl';
+            input.multiple = true;
+            input.onchange = (ev) => {
+                if (ev.target.files?.length) {
+                    for (let file of ev.target.files) {
+                        loadModelFromFile(file);
+                    }
+                }
+                dropZone.classList.remove('active');
+            };
+            input.click();
+        });
+    }
+
+    // ================================================================
+    // SECTION 12: UI EVENT HANDLERS - معالجات أحداث واجهة المستخدم
+    // ================================================================
+    
+    // إظهار/إخفاء لوحة المجسمات
+    toggleModelsBtn.addEventListener('click', () => {
+        panelVisible = !panelVisible;
+        if (panelVisible) {
+            modelsPanel.classList.remove('collapsed');
+        } else {
+            modelsPanel.classList.add('collapsed');
+        }
+    });
+    
+    clearAllBtn.addEventListener('click', clearAllModels);
+    
+    // إظهار/إخفاء لوحة الإعدادات
+    let isSettingsOpen = false;
+    settingsToggle.addEventListener('click', () => {
+        isSettingsOpen = !isSettingsOpen;
+        if (isSettingsOpen) settingsPanel.classList.add('open');
+        else settingsPanel.classList.remove('open');
+    });
+    
+    // ربط أشرطة التحكم بالإضاءة
+    intensitySlider.addEventListener('input', updateLightIntensity);
+    ambientSlider.addEventListener('input', updateAmbientIntensity);
+    followCamBtn.addEventListener('click', () => enableFollowCameraLight(!followCameraLight));
+    
+    // أزرار الإضاءة المسبقة
+    document.querySelectorAll('[data-preset]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            applyPreset(btn.dataset.preset);
+            if (followCameraLight) enableFollowCameraLight(false);
+        });
+    });
+    
+    // أزرار تغيير خلفية HDRI
+    document.querySelectorAll('[data-hdri]').forEach(btn => {
+        btn.addEventListener('click', () => loadHDRI(btn.dataset.hdri));
+    });
+    
+    hdriIntensitySlider.addEventListener('input', (e) => setHDRIIntensity(parseFloat(e.target.value)));
+    
+    // زر إظهار/إخفاء HDRI
+    let hdriVisibleState = true;
+    hdriVisibilityToggle.addEventListener('click', () => {
+        hdriVisibleState = !hdriVisibleState;
+        setHDRIVisibility(hdriVisibleState);
+        if (hdriVisibleState) hdriVisibilityToggle.classList.add('active');
+        else hdriVisibilityToggle.classList.remove('active');
+    });
+    
+    // زر تفعيل/إلغاء تأثير التوهج (Bloom)
+    bloomToggle.addEventListener('click', () => {
+        const isActive = bloomToggle.classList.contains('active');
+        if (isActive) {
+            bloomToggle.classList.remove('active');
+            toggleBloom(false);
+        } else {
+            bloomToggle.classList.add('active');
+            toggleBloom(true);
+        }
+    });
+    
+    // زر تفعيل/إلغاء الدوران التلقائي
+    autoRotateToggle.addEventListener('click', () => {
+        const isActive = autoRotateToggle.classList.contains('active');
+        if (isActive) {
+            autoRotateToggle.classList.remove('active');
+            toggleAutoRotate(false);
+        } else {
+            autoRotateToggle.classList.add('active');
+            toggleAutoRotate(true);
+        }
+    });
+    
+    // أزرار تغيير لون الخلفية
+    bgPresetBtns.forEach(btn => btn.addEventListener('click', () => setBackgroundColor(btn.dataset.bg)));
+    bgColorPicker.addEventListener('input', e => setBackgroundColor(e.target.value));
+    
+    // زر إعادة ضبط الكاميرا
+    resetBtn.addEventListener('click', () => fitCameraToAllModels());
+    
+    // زر تنعيم الحواف (يؤثر على جودة الرندر)
+    let currentAntialias = true;
+    smoothToggle.addEventListener('click', () => {
+        currentAntialias = !currentAntialias;
+        if (currentAntialias) smoothToggle.classList.add('active');
+        else smoothToggle.classList.remove('active');
+        // ملاحظة: تغيير الـ antialias يتطلب إعادة إنشاء الرندرر
+        // يمكن تنفيذ ذلك ولكن سيؤثر على الأداء، لذا نكتفي بتحديث الواجهة فقط
+    });
+
+    // ================================================================
+    // SECTION 13: INITIALIZATION & ANIMATION LOOP - التهيئة وحلقة الحركة
+    // ================================================================
+    
+    // تحميل خلفية HDRI افتراضية (Studio)
+    loadHDRI('studio');
+    
+    // حلقة الحركة (Animation Loop) - تعمل 60 مرة في الثانية
+    function animate() {
+        requestAnimationFrame(animate);
+        
+        // تحديث موقع الإضاءة إذا كانت تتبع الكاميرا
+        if (followCameraLight) updateLightFromCamera();
+        
+        // تأثير حركة نابضة للإضاءة السفلية (Bounce Light)
+        const time = Date.now() * 0.002;
+        bounceLight.intensity = 0.25 + Math.sin(time) * 0.1;
+        
+        controls.update();           // تحديث عناصر التحكم
+        effectComposer.render();     // عرض المشهد مع التأثيرات
+    }
+    animate();
+    
+    // معالجة تغيير حجم النافذة (Responsive)
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        effectComposer.setSize(window.innerWidth, window.innerHeight);
+    });
+    
+    // بدء التطبيق (تحميل النموذج الافتراضي إن وُجد)
+    loadDefaultModel();
+    
+</script>
+</body>
+</html>
